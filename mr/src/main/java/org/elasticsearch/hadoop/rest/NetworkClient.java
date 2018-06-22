@@ -26,12 +26,12 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.elasticsearch.hadoop.EsHadoopException;
 import org.elasticsearch.hadoop.EsHadoopIllegalStateException;
 import org.elasticsearch.hadoop.cfg.Settings;
+import org.elasticsearch.hadoop.common.AlertUtil;
 import org.elasticsearch.hadoop.rest.commonshttp.CommonsHttpTransportFactory;
 import org.elasticsearch.hadoop.rest.pooling.PooledTransportManager;
 import org.elasticsearch.hadoop.rest.stats.Stats;
@@ -54,6 +54,11 @@ public class NetworkClient implements StatsAware, Closeable {
     private int nextClient = 0;
 
     private final Stats stats = new Stats();
+
+    private int retryLimit;
+    private long retryTime;
+    private String esResourceWrite;
+    private  String dingUrl;
 
     public NetworkClient(Settings settings) {
         this(settings, (!SettingsUtils.hasJobTransportPoolingKey(settings) ? new CommonsHttpTransportFactory() : PooledTransportManager.getTransportFactory(settings)));
@@ -82,10 +87,18 @@ public class NetworkClient implements StatsAware, Closeable {
         selectNextNode();
 
         Assert.notNull(currentTransport, "no node information provided");
+
+        //
+        retryLimit= settings.getBatchWriteRetryCount();
+        retryTime= settings.getBatchWriteRetryWait();
+        esResourceWrite=settings.getResourceWrite();
+        dingUrl=settings.getDingUrl();
+
+
     }
 
     private boolean selectNextNode() {
-        if (nextClient >= nodes.size()) {
+        if (nextClient >= nodes.size()) {//node阻塞
             return false;
         }
 
@@ -141,7 +154,24 @@ public class NetworkClient implements StatsAware, Closeable {
                 failedNodes.put(failed, ex);
 
                 newNode = selectNextNode();
-
+                //==========================
+                int retryCount=0;//重试次数
+                while(!newNode && ++retryCount < retryLimit){
+                    String text="[梵高推数提示:WARN](Hive2ES.... Retry ....index=【"+esResourceWrite+"】)";
+                    AlertUtil.sendMessesgeByDing(dingUrl,text);
+                    log.warn("Retry ....retryCount=["+retryCount+"]");
+                    try {
+                        Thread.sleep(retryTime);
+                    } catch (InterruptedException e) {
+                        if (log.isDebugEnabled()) {
+                            log.debug(String.format("Thread interrupted - giving up on retrying..."));
+                        }
+                    }
+                    newNode = selectNextNode();//重试
+                }
+                String text="[梵高推数提示:ERROR](Hive2ES...index=【"+esResourceWrite+"】)";
+                AlertUtil.sendMessesgeByDing(dingUrl,text);
+                //==========================
                 log.error(String.format("Node [%s] failed (%s); "
                         + (newNode ? "selected next node [" + currentNode + "]" : "no other nodes left - aborting..."),
                         failed, ex.getMessage()));

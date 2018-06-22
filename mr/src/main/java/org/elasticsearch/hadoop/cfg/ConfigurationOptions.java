@@ -291,4 +291,8 @@ public interface ConfigurationOptions {
     String ES_NET_PROXY_SOCKS_PASS = "es.net.proxy.socks.pass";
     String ES_NET_PROXY_SOCKS_USE_SYSTEM_PROPS = "es.net.proxy.socks.use.system.props";
     String ES_NET_PROXY_SOCKS_USE_SYSTEM_PROPS_DEFAULT = "yes";
+
+
+    //Alert:
+    String DING_URL="ding.url";//钉钉机器人url
 }

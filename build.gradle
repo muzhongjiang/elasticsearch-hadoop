@@ -1,3 +1,4 @@
+
 description = 'Elasticsearch for Apache Hadoop'
 
 buildscript {
@@ -67,7 +68,7 @@ switch (hadoopDistro) {
               "org.apache.hadoop:hadoop-tools:$hadoopVersion"]
 
     break;
-    
+
   // Hadoop 1.1.x
   case "hadoop11":
     hadoopVersion = hadoop11Version
@@ -164,8 +165,9 @@ ext.manifestTemplate = manifest {
 allprojects { project ->
 
     compileJava {
-        sourceCompatibility = 1.6
-        targetCompatibility = 1.6 
+        sourceCompatibility = 1.7
+        targetCompatibility = 1.7
+        options.encoding = "UTF-8"
     }
     
     compileJava.options*.compilerArgs = [
@@ -173,14 +175,14 @@ allprojects { project ->
     ]
     
     compileTestJava {
-		sourceCompatibility = 1.6
-		targetCompatibility = 1.6
+		sourceCompatibility = 1.7
+		targetCompatibility = 1.7
     }
     
     sourceSets.test.resources.srcDirs = ["src/test/resources", "src/test/java"]
 
     test {
-        reports.html.enabled = true     
+        reports.html.enabled = true
 
         jacoco {
             enabled = project.hasProperty("enableJacoco")
@@ -262,8 +264,8 @@ allprojects { project ->
             // but ES 5.0 is JDK8 
             javaRuntimeName = "JavaSE-1.8"
             // specify again the compatibility to override the default JavaRE settings
-            sourceCompatibility = 1.6
-            targetCompatibility = 1.6
+            sourceCompatibility = 1.7
+            targetCompatibility = 1.7
         }
     }
     
@@ -287,7 +289,10 @@ allprojects { project ->
 
     javadoc {
         ext.srcDir = file("${rootProject}/docs/src/api")
-    
+
+        options.encoding ="UTF-8"
+        options.charSet ="UTF-8"
+
         configure(options) {
             //stylesheetFile = file("${rootProject.projectDir}/docs/src/api/javadoc.css")
             //overview = "${rootProject.projectDir}/docs/src/api/overview.html"
@@ -297,7 +302,7 @@ allprojects { project ->
             author = false
             header = project.name
             showFromProtected()
-    
+
             // enable it for java 1.8 or higher
             if (java8)
                 addStringOption('Xdoclint:none', '-quiet')
@@ -325,9 +330,9 @@ allprojects { project ->
             ]
 
             excludes = [
-                "org/elasticsearch/hadoop/mr/compat/**", 
-                "org/elasticsearch/hadoop/rest/**", 
-                "org/elasticsearch/hadoop/serialization/**", 
+                "org/elasticsearch/hadoop/mr/compat/**",
+                "org/elasticsearch/hadoop/rest/**",
+                "org/elasticsearch/hadoop/serialization/**",
                 "org/elasticsearch/hadoop/util/**",
                 "org/apache/hadoop/hive/**"
             ]
@@ -422,7 +427,7 @@ project(":elasticsearch-hadoop-mr") {
     dependencies {
         provided(hadoopClient)
         provided("org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion")
-        
+
         // Testing
         if (hadoopVersion.contains("1.0.")) {
             // missing dependency in Hadoop 1.0.3/1.0.4
@@ -586,8 +591,8 @@ def baseSparkProject(target, sparkVersion) {
             "-Ywarn-value-discard"
         ]
 
-        sourceCompatibility = 1.6
-        targetCompatibility = 1.6
+        sourceCompatibility = 1.7
+        targetCompatibility = 1.7
     }
     
     println "Spark $sparkVersion compiled using Scala $scalaMajorVersion [$scalaVersion]"

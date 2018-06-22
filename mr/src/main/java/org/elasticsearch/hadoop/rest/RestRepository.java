@@ -18,11 +18,23 @@
  */
 package org.elasticsearch.hadoop.rest;
 
+import static org.elasticsearch.hadoop.rest.Request.Method.POST;
+
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.BitSet;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.elasticsearch.hadoop.EsHadoopException;
 import org.elasticsearch.hadoop.EsHadoopIllegalStateException;
 import org.elasticsearch.hadoop.cfg.Settings;
+import org.elasticsearch.hadoop.common.AlertUtil;
 import org.elasticsearch.hadoop.rest.query.QueryUtils;
 import org.elasticsearch.hadoop.rest.stats.Stats;
 import org.elasticsearch.hadoop.rest.stats.StatsAware;
@@ -47,18 +59,6 @@ import org.elasticsearch.hadoop.util.SettingsUtils;
 import org.elasticsearch.hadoop.util.StringUtils;
 import org.elasticsearch.hadoop.util.TrackingBytesArray;
 import org.elasticsearch.hadoop.util.unit.TimeValue;
-
-import java.io.Closeable;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.BitSet;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-
-import static org.elasticsearch.hadoop.rest.Request.Method.POST;
 
 /**
  * Rest client performing high-level operations using buffers to improve performance. Stateful in that once created, it is used to perform updates against the same index.
@@ -97,6 +97,11 @@ public class RestRepository implements Closeable, StatsAware {
     private final Settings settings;
     private final Stats stats = new Stats();
 
+    private int retryLimit;
+    private long retryTime;
+    private String esResourceWrite;
+    private  String dingUrl;
+
     public RestRepository(Settings settings) {
         this.settings = settings;
 
@@ -111,6 +116,12 @@ public class RestRepository implements Closeable, StatsAware {
         Assert.isTrue(resourceR != null || resourceW != null, "Invalid configuration - No read or write resource specified");
 
         this.client = new RestClient(settings);
+
+        //
+        retryLimit= settings.getBatchWriteRetryCount();
+        retryTime= settings.getBatchWriteRetryWait();
+        esResourceWrite=settings.getResourceWrite();
+        dingUrl=settings.getDingUrl();
     }
 
     /** postpone writing initialization since we can do only reading so there's no need to allocate buffers */
@@ -240,7 +251,28 @@ public class RestRepository implements Closeable, StatsAware {
 
     public void flush() {
         BulkResponse bulk = tryFlush();
-        if (!bulk.getLeftovers().isEmpty()) {
+
+        //===================================
+        BitSet leftovers=bulk.getLeftovers();
+        int retryCount=0;//重试次数
+        while(!leftovers.isEmpty() && ++retryCount < retryLimit){
+            String text="[梵高推数提示:WARN](Hive2ES.... Retry ....index=【"+esResourceWrite+"】)";
+            AlertUtil.sendMessesgeByDing(dingUrl,text);
+            log.warn("Retry ....retryCount=["+retryCount+"]");
+            try {
+                Thread.sleep(retryTime);
+            } catch (InterruptedException e) {
+                if (log.isDebugEnabled()) {
+                    log.debug(String.format("Thread interrupted - giving up on retrying..."));
+                }
+            }
+            leftovers=bulk.getLeftovers();//重试
+        }
+        String text="[梵高推数提示:ERROR](Hive2ES...index=【"+esResourceWrite+"】)";
+        AlertUtil.sendMessesgeByDing(dingUrl,text);
+        //==================================
+
+        if (!bulk.getLeftovers().isEmpty()) {//Flush阻塞
             String header = String.format("Could not write all entries [%s/%s] (Maybe ES was overloaded?). Error sample (first [%s] error messages):\n", bulk.getLeftovers().cardinality(), bulk.getTotalWrites(), bulk.getErrorExamples().size());
             StringBuilder message = new StringBuilder(header);
             for (String errors : bulk.getErrorExamples()) {

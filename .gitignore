@@ -2,6 +2,7 @@
 bin
 build
 target
+out
 .settings
 .classpath
 .project
@@ -9,6 +10,7 @@ target
 *.ipr
 *.iws
 *.log
+*.class
 metastore_db
 .idea
 /hdfs/data
